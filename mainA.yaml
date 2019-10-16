@@ -1,0 +1,66 @@
+Resources:
+  stackvpc:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      Parameters:
+        # VPCName: !Ref VPCName
+        VPCName: yasirvpc1
+        # KeyName: !Ref KeyName
+        KeyName: yasirKP
+        # InstanceType: !Ref InstanceType
+        InstanceType: t2.micro
+        # InstanceProfileName: !Ref InstanceProfileName
+        InstanceProfileName: myinstanceprofile
+        # DBSubnetGroupName: !Ref DBSubnetGroupName
+        DBSubnetGroupName: mydbsubnetgroup
+      TemplateURL: "https://for-nested-stacks.s3.us-east-2.amazonaws.com/template1-vpc-.yaml"
+  stackrds:
+    DependsOn: stackvpc
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      Parameters:
+        DBSubnetGroup: !GetAtt stackvpc.Outputs.DBSubnetGroupName
+        VPCSecurityGroups: !GetAtt stackvpc.Outputs.DBSecurityGroup
+        KeyName: yasirKP
+        VPCStackName: stackvpc
+        AllocatedStorage: 20
+        DBInstanceClass: db.t2.micro
+        DbIdentifier: mydbinstance
+        Engine: MySQL
+        EngineVersion: 5.7.22
+        MasterUserName: mydbinstance
+        MasterUserPassword: mydbinstance
+      TemplateURL: "https://for-nested-stacks.s3.us-east-2.amazonaws.com/rds.yaml"
+  stackelb:
+    DependsOn: stackrds
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      Parameters:
+        PublicSubnet1: !GetAtt stackvpc.Outputs.PublicSubnetId1
+        PublicSubnet2: !GetAtt stackvpc.Outputs.PublicSubnetId2
+        LBSecurityGroup: !GetAtt stackvpc.Outputs.LBSecurityGroupId
+        VpcId: !GetAtt stackvpc.Outputs.VpcId
+        ALBName: myalb
+        VPCStackName: stackvpc
+        HealthPath: /
+        TargetGroupName: mytg
+      TemplateURL: "https://for-nested-stacks.s3.us-east-2.amazonaws.com/template+3-ELB.yaml"
+  stackasg:
+    DependsOn: stackelb
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      Parameters:
+        Endpoint: !GetAtt stackrds.Outputs.DBEndpoint
+        PublicSecurityGroup: !GetAtt stackvpc.Outputs.PublicSecurityGroupId
+        TargetGroup: !GetAtt stackelb.Outputs.TargetGroupARN
+        InstanceProfile: !GetAtt stackvpc.Outputs.IamInstanceProfile
+        PublicSubnet1: !GetAtt stackvpc.Outputs.PublicSubnetId1
+        PublicSubnet2: !GetAtt stackvpc.Outputs.PublicSubnetId2
+        RDSStackName: stackrds
+        LoadBalancerStack: stackelb
+        VPCStackName: stackvpc
+        KeyName: yasirKP
+        InstanceType: t2.micro
+      TemplateURL: "https://for-nested-stacks.s3.us-east-2.amazonaws.com/template+2-+ASG.yaml"
+
+  

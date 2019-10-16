@@ -1,0 +1,130 @@
+Description: AutoScaling group and launch Configuration
+Parameters:
+  PublicSubnet1:
+    Type: String
+  PublicSubnet2:
+    Type: String
+  InstanceProfile:
+    Type: String
+  TargetGroup:
+    Type: String
+  PublicSecurityGroup:
+    Type: String
+  Endpoint:
+    Type: String
+  RDSStackName:
+    Type: String
+    Default: stackrds
+  LoadBalancerStack:
+    Type: String
+    Default: stackelb
+  VPCStackName:
+    Type: String
+    Default: stackvpc
+  KeyName:
+    Description: The key pair (.pem) which is used for the infrastructure.
+    Type: AWS::EC2::KeyPair::KeyName
+    Default: yasirKP
+    ConstraintDescription: must be a valid and existing key pair name.
+  InstanceType:
+    Description: Describes which type of instance would be provisioned when creating the stack.
+    Type: String
+    Default: t2.micro
+    AllowedValues:
+      - t2.nano
+      - t2.micro
+      - t2.small
+      - t2.medium
+      - t2.large
+  # BucketSelection:
+  #   Description: Enter S3 bucket name for the target source.
+  #   Type: String
+  #   ConstraintDescription: Must be an existing S3 bucket in the region.
+Mappings:
+  RegionMap:
+    us-east-1:
+      AZ1: us-east-1a
+      AZ2: us-east-1b
+      AZ3: us-east-1c
+      AZ4: us-east-1d
+      AZ5: us-east-1e
+      AZ6: us-east-1f
+      Ubuntu86: ami-07d0cf3af28718ef8
+      UbuntuArm: ami-0c46f9f09e3a8c2b5
+    us-east-2:
+      AZ1: us-east-2a
+      AZ2: us-east-2b
+      AZ3: us-east-2c
+      Ubuntu86: ami-05c1fa8df71875112
+      UbuntuArm: ami-0606a0d9f566249d3
+Resources:
+  MyLaunchConfiguration:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Properties:
+      LaunchConfigurationName: MyLaunchConfiguration
+      AssociatePublicIpAddress: true
+      KeyName:
+        Ref: KeyName
+      ImageId: !FindInMap [RegionMap, !Ref "AWS::Region", Ubuntu86]
+      UserData:
+        Fn::Base64: !Sub
+        - |
+          #!/bin/bash
+          set -x
+          sleep 1m
+          apt-get update -y
+          apt-get upgrade -y
+          apt install mysql-server -y
+          apt install php -y
+          apt install php-mysql -y
+          apt install awscli -y
+          aws s3 cp s3://yasirassigns3bucketneww/app.init.tar.gz .
+          cd ~
+          cd ..
+          mv app.init.tar.gz ~/
+          cd ~
+          tar -zxvf app.init.tar.gz -C ~/
+          cd /etc/mysql/mysql.conf.d
+          sed -i -e 's/bind/#bind/1' mysqld.cnf
+          cd ~
+          sleep 1m
+          mysql -u mydbinstance -pmydbinstance -h ${Epoint} < init.sql
+          mysql -u mydbinstance -pmydbinstance -h ${Epoint} <<MYSQL_SCRIPT
+          CREATE USER 'mydbinstance'@'%' IDENTIFIED BY 'mydbinstance';
+          GRANT ALL PRIVILEGES ON *.* TO 'mydbinstance'@'%';
+          FLUSH PRIVILEGES;
+          exit;
+          MYSQL_SCRIPT
+          /etc/init.d/mysql restart
+          apt install apache2 -y
+          cd /var/www
+          rm -r html/
+          cd
+          aws s3 cp s3://yasirassigns3bucketneww/app.php.tar.gz .
+          tar -zxf app.php.tar.gz -C /var/www/
+          cd
+          sed -i -e 's/10.0.2.17/${Epoint}/g' /var/www/html/config.php
+          service apache2 restart
+        # - s3Bucket: !Ref BucketSelection  
+        - Epoint: !Ref Endpoint
+
+      SecurityGroups: 
+        - Ref: PublicSecurityGroup
+      InstanceType: !Ref InstanceType
+      IamInstanceProfile: !Ref InstanceProfile
+  MyAutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      LaunchConfigurationName:
+        Ref: MyLaunchConfiguration
+      TargetGroupARNs:
+        - Ref: TargetGroup
+      MaxSize: 3
+      MinSize: 2
+      VPCZoneIdentifier:
+        - Ref: PublicSubnet1
+        - Ref: PublicSubnet2
+      Tags:
+      - Key: Name
+        Value: MyAutoScalingGroup
+        PropagateAtLaunch: true

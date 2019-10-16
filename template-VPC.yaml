@@ -1,0 +1,394 @@
+Description: Creating VPC along with subnets and instances.Supported for Ubuntu AMI and for N.Virginia and Ohio region.
+Mappings:
+  RegionMap:
+    us-east-1:
+      AZ1: us-east-1a
+      AZ2: us-east-1b
+      AZ3: us-east-1c
+      AZ4: us-east-1d
+      AZ5: us-east-1e
+      AZ6: us-east-1f
+      Ubuntu86: ami-07d0cf3af28718ef8
+      UbuntuArm: ami-0c46f9f09e3a8c2b5
+    us-east-2:
+      AZ1: us-east-2a
+      AZ2: us-east-2b
+      AZ3: us-east-2c
+      Ubuntu86: ami-05c1fa8df71875112
+      UbuntuArm: ami-0606a0d9f566249d3 
+Parameters:
+  VPCName:
+    Description: Enter name for the custom VPC
+    Type: String
+    Default: stackvpc
+  KeyName:
+    Description: The key pair (.pem) which is used for the infrastructure.
+    Type: AWS::EC2::KeyPair::KeyName
+    Default: yasirKP
+    ConstraintDescription: must be a valid and existing key pair name.
+  InstanceType:
+    Description: Describes which type of instance would be provisioned when creating the stack.
+    Type: String
+    Default: t2.micro
+    AllowedValues:
+      - t2.nano
+      - t2.micro
+      - t2.small
+      - t2.medium
+      - t2.large
+  InstanceProfileName:
+    Description: Enter Instance Profile name
+    Type: String
+    Default: myinstanceprofile
+  DBSubnetGroupName:
+    Description: Name for the DB Subnet Group
+    Type: String
+    Default: mydbsubnetgroup
+Resources:
+  MyRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          -
+            Effect: "Allow"
+            Principal:
+              Service:
+                - "ec2.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      Path: "/"
+  RolePolicies:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: "MyPolicy"
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          -
+            Effect: "Allow"
+            Action: "s3:*"
+            Resource: "*"
+      Roles:
+        -
+          Ref: "MyRole"
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: !Ref InstanceProfileName
+      Path: /
+      Roles:
+        -
+          Ref: "MyRole"
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      Tags:
+      - Key: Name
+        Value: !Ref VPCName
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: VPC
+      CidrBlock: 10.0.1.0/24
+      AvailabilityZone: !FindInMap [RegionMap, !Ref "AWS::Region", AZ1]
+      Tags:
+      - Key: Name
+        Value: PublicSubnet1
+  PublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: VPC
+      CidrBlock: 10.0.3.0/24
+      AvailabilityZone: !FindInMap [RegionMap, !Ref "AWS::Region", AZ3]
+      Tags:
+      - Key: Name
+        Value: PublicSubnet2
+  PrivateSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: VPC
+      CidrBlock: 10.0.2.0/24
+      AvailabilityZone: !FindInMap [RegionMap, !Ref "AWS::Region", AZ2]
+      Tags:
+      - Key: Name
+        Value: PrivateSubnet
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: VPC
+      CidrBlock: 10.0.4.0/24
+      AvailabilityZone: !FindInMap [RegionMap, !Ref "AWS::Region", AZ3]
+      Tags:
+      - Key: Name
+        Value: PrivateSubnet2
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+      - Key: Name
+        Value: yasirInternetGateway
+  GatewaytoInternet:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId:
+        Ref: VPC
+      InternetGatewayId:
+        Ref: InternetGateway
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:
+        Ref: VPC
+      Tags:
+      - Key: Name
+        Value: PublicRouteTable
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: GatewaytoInternet
+    Properties:
+      RouteTableId:
+        Ref: PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId:
+        Ref: InternetGateway
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:
+        Ref: VPC
+      Tags:
+      - Key: Name
+        Value: PrivateRouteTable
+  PrivateRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId:
+        Ref: PrivateRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId:
+        Ref: NAT
+  NAT:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId:
+        !GetAtt ElasticIP.AllocationId
+      SubnetId:
+        Ref: PublicSubnet1
+      Tags:
+      - Key: Name
+        Value: yasirassignNATGateway
+  ElasticIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: VPC
+  PublicSubnetRouteTableAssociation1:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: PublicSubnet1
+      RouteTableId:
+        Ref: PublicRouteTable
+  PublicSubnetRouteTableAssociation2:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: PublicSubnet2
+      RouteTableId:
+        Ref: PublicRouteTable
+  PrivateSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: PrivateSubnet
+      RouteTableId:
+        Ref: PrivateRouteTable
+  PrivateSubnetRouteTableAssociation2:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: PrivateSubnet2
+      RouteTableId:
+        Ref: PrivateRouteTable
+  LBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties: 
+      GroupDescription: Load Balancer Security Group
+      SecurityGroupIngress: 
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0 
+      VpcId:
+        Ref: VPC
+  PublicSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Enable http ssh and ping for public instance
+      VpcId:
+        Ref: VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: '3306'
+          ToPort: '3306'
+          CidrIp: 0.0.0.0/0
+          # SourceSecurityGroupId: !Ref LBSecurityGroup
+        - IpProtocol: tcp
+          FromPort: '80'
+          ToPort: '80'
+          CidrIp: 0.0.0.0/0
+          # SourceSecurityGroupId: !Ref LBSecurityGroup
+        - IpProtocol: icmp
+          FromPort: '8'
+          ToPort: '-1'
+          CidrIp: 0.0.0.0/0
+          # SourceSecurityGroupId: !Ref LBSecurityGroup
+  DBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: for rds db instance
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp: 10.0.2.0/24
+        - IpProtocol: tcp
+          FromPort: '3306'
+          ToPort: '3306'
+          CidrIp: 10.0.2.0/24
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp: 10.0.4.0/24
+        - IpProtocol: tcp
+          FromPort: '3306'
+          ToPort: '3306'
+          CidrIp: 10.0.4.0/24
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp: 10.0.1.0/24
+        - IpProtocol: tcp
+          FromPort: '3306'
+          ToPort: '3306'
+          CidrIp: 10.0.1.0/24
+        - IpProtocol: tcp
+          FromPort: '3306'
+          ToPort: '3306'
+          CidrIp: 10.0.3.0/24
+  PrivateSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Enable mysql and ssh for private instance
+      VpcId:
+        Ref: VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp: 10.0.2.0/24
+        - IpProtocol: tcp
+          FromPort: '3306'
+          ToPort: '3306'
+          CidrIp: 10.0.2.0/24
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp: 10.0.4.0/24
+        - IpProtocol: tcp
+          FromPort: '3306'
+          ToPort: '3306'
+          CidrIp: 10.0.4.0/24
+        - IpProtocol: tcp
+          FromPort: '80'
+          ToPort: '80'
+          CidrIp: 0.0.0.0/0
+  DBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Subnet group for the RDS DB instance
+      DBSubnetGroupName: !Ref DBSubnetGroupName
+      SubnetIds:
+        - !Ref PrivateSubnet
+        - !Ref PrivateSubnet2
+      Tags:
+        - Key: Name
+          Value: DBSubnetGroup
+Outputs:
+  PublicSecurityGroupId:
+    Description: the Id of the public security group
+    Value: !Ref PublicSecurityGroup
+    Export:
+      Name: !Sub ${AWS::StackName}-PublicSecurityGroupId
+  PrivateSecurityGroupId:
+    Description: the Id of the private security group
+    Value: !Ref PrivateSecurityGroup
+    Export:
+      Name: !Sub ${AWS::StackName}-PrivateSecurityGroupId
+  InstanceType:
+    Description: the Instance Type for the instances
+    Value: !Ref InstanceType
+    Export:
+      Name: !Sub ${AWS::StackName}-InstanceType
+  IamInstanceProfile:
+    Description: The profile of Iam roles
+    Value: !Ref InstanceProfile
+    Export:
+      Name: !Sub ${AWS::StackName}-IamInstanceProfile
+  PublicSubnetId1:
+    Description: The Id of the Public Subnet1
+    Value: !Ref PublicSubnet1
+    Export:
+      Name: !Sub ${AWS::StackName}-PublicSubnetId1
+  PrivateSubnetId1:
+    Description: The Id of the private Subnet1
+    Value: !Ref PrivateSubnet
+    Export:
+      Name: !Sub ${AWS::StackName}-PrivateSubnetId1
+  PublicSubnetId2:
+    Description: The Id of the Public Subnet2
+    Value: !Ref PublicSubnet2
+    Export:
+      Name: !Sub ${AWS::StackName}-PublicSubnetId2
+  LBSecurityGroupId:
+    Description: The Id of the Load Balancer security group
+    Value: !Ref LBSecurityGroup
+    Export:
+      Name: !Sub ${AWS::StackName}-LBSecurityGroupId
+  KeyNameFingerprint:
+    Description: The finger print of the valid and existing keypair
+    Value: !Ref KeyName
+    Export:
+      Name: !Sub ${AWS::StackName}-KeyNameFingerPrint
+  VpcId:
+    Description: The Identifier of the custom VPC
+    Value: !Ref VPC
+    Export:
+      Name: !Sub ${AWS::StackName}-VpcId
+  DBSecurityGroup:
+    Description: for rds db instance
+    Value: !Ref DBSecurityGroup
+  DBSubnetGroupName:
+    Description: The subnetgroup name for the RDS DB instance
+    Value: !Ref DBSubnetGroupName
+  VPCName:
+    Value: !Ref VPCName
+
+
+
+
+
+    
+
+

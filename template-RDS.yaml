@@ -1,0 +1,91 @@
+Description: Provisioning an RDS instance
+Mappings:
+  RegionMap:
+    us-east-1:
+      AZ1: us-east-1a
+      AZ2: us-east-1b
+      AZ3: us-east-1c
+      AZ4: us-east-1d
+      AZ5: us-east-1e
+      AZ6: us-east-1f
+      Ubuntu86: ami-07d0cf3af28718ef8
+      UbuntuArm: ami-0c46f9f09e3a8c2b5
+    us-east-2:
+      AZ1: us-east-2a
+      AZ2: us-east-2b
+      AZ3: us-east-2c
+      Ubuntu86: ami-05c1fa8df71875112
+      UbuntuArm: ami-0606a0d9f566249d3 
+Parameters:
+  KeyName:
+    Description: The key pair (.pem) which is used for the infrastructure.
+    Type: AWS::EC2::KeyPair::KeyName
+    Default: yasirKP
+    ConstraintDescription: must be a valid and existing key pair name.
+  VPCStackName:
+    Type: String
+    Default: stackvpc
+  AllocatedStorage:
+    Description: Total allocated Storage for the RDS db instance
+    Type: Number
+    Default: 20
+  DBInstanceClass:
+    Description: Choose the rds class
+    Type: String
+    Default: db.t2.micro
+    AllowedValues:
+      - db.t2.micro
+      - db.t2.small	
+  DbIdentifier:
+    Description: the name of the db instance.
+    Type: String
+    Default: mydbinstance
+  Engine:
+    Description: Choose the engine for the database
+    Type: String
+    Default: MySQL
+    AllowedValues:
+      - MySQL
+  DBSubnetGroup:
+    Description: Choose the engine for the database
+    Type: String
+  VPCSecurityGroups:
+    Type: String
+  EngineVersion:
+    Type: String
+    Default: 5.7.22
+    AllowedValues:
+      - 5.7.22
+      - 5.7.23
+  MasterUserName:
+    Type: String
+    Default: mydbinstance
+  MasterUserPassword:
+    Type: String
+    Default: mydbinstance
+    ConstraintDescription: must be minimum of 8 characters
+Resources:
+  RDSInstance:
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: Delete
+    Properties:
+      DBInstanceIdentifier: !Ref DbIdentifier
+      AllocatedStorage: !Ref AllocatedStorage
+      DBInstanceClass: !Ref DBInstanceClass
+      Engine: !Ref Engine
+      EngineVersion: !Ref EngineVersion
+      MasterUserPassword: !Ref MasterUserPassword
+      MasterUsername: !Ref MasterUserName
+      PubliclyAccessible: "false"
+      VPCSecurityGroups:
+        - Ref: VPCSecurityGroups
+      DBSubnetGroupName: !Ref DBSubnetGroup
+      Tags:
+        - Key: Name
+          Value: mydbinstance
+Outputs:
+  DBEndpoint:
+    Description: The endpoint of the rds db instance
+    Value: !GetAtt RDSInstance.Endpoint.Address
+    Export:
+      Name: !Sub ${AWS::StackName}-DBEndpoint

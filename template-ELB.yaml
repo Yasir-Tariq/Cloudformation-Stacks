@@ -1,0 +1,118 @@
+# Description: Testing the elastic load balancer
+# Parameters:
+#   LoadBalancerName:
+#     Description: Name of the Load Balancer
+#     Type: String
+#   HealthCheckTarget:
+#     Description: Target at which health check is applied
+#     Type: String
+#   VPCStackName:
+#     Type: String
+# Resources:
+#   MyLoadBalancer:
+#     Type: AWS::ElasticLoadBalancing::LoadBalancer
+#     Properties:
+#       Listeners:
+#         - LoadBalancerPort: '80'
+#           InstancePort: '80'
+#           Protocol: HTTP
+#       HealthCheck:
+#         Target: !Ref HealthCheckTarget
+#         HealthyThreshold: '2'
+#         UnhealthyThreshold: '3'
+#         Interval: '6'
+#         Timeout: '4'
+#       Subnets:
+#           - Fn::ImportValue:
+#               Fn::Sub: "${VPCStackName}-PublicSubnetId1"
+#           - Fn::ImportValue:
+#               Fn::Sub: "${VPCStackName}-PublicSubnetId2"
+#       SecurityGroups:
+#           - Fn::ImportValue:
+#               Fn::Sub: "${VPCStackName}-LBSecurityGroupId"
+#       Tags:
+#       - Key: Name
+#         Value: !Ref LoadBalancerName
+#       Scheme: internet-facing
+# Outputs:
+#   MyLoadBalancer:
+#     Description: The Classic Load Balancer value
+#     Value: !Ref MyLoadBalancer
+#     Export:
+#       Name: !Sub ${AWS::StackName}-MyLoadBalancer
+Description: The Application Load Balancer for the infrastructure
+Parameters:
+  VpcId:
+    Type: String
+  LBSecurityGroup:
+    Type: String
+  PublicSubnet1:
+    Type: String
+  PublicSubnet2:
+    Type: String
+  ALBName:
+    Description: The name of the Application load balancer
+    Type: String
+    Default: myalb
+  VPCStackName:
+    Type: String
+    Default: stackvpc
+  HealthPath:
+    Description: The path at which health check is applied.
+    Type: String
+    Default: /
+  TargetGroupName:
+    Description: The name for the target group
+    Type: String
+    Default: mytg
+Resources:
+  MyALB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: !Ref ALBName
+      Type: application
+      Subnets:
+        - !Ref PublicSubnet1
+        - !Ref PublicSubnet2
+      Scheme: internet-facing
+      SecurityGroups:
+        - Ref: LBSecurityGroup
+      Tags:
+       - Key: Name
+         Value: !Ref ALBName
+  MyTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckEnabled: true
+      HealthCheckIntervalSeconds: '6'
+      HealthCheckPath: !Ref HealthPath
+      HealthCheckPort: '80'
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: '4'
+      HealthyThresholdCount: '2'
+      Port: '80'
+      Protocol: HTTP
+      Name: !Ref TargetGroupName
+      TargetType: instance
+      UnhealthyThresholdCount: '3'
+      VpcId: !Ref VpcId
+  HTTPListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref MyALB
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref MyTargetGroup
+Outputs:
+  LoadBalancerName:
+    Description: The value of the Load Balancer
+    Value: !Ref ALBName
+    Export:
+      Name: !Sub ${AWS::StackName}-LoadBalancerName
+  TargetGroupARN:
+    Description: The ARN of the Target Group
+    Value: !Ref MyTargetGroup
+    Export:
+      Name: !Sub ${AWS::StackName}-TargetGroupARN
